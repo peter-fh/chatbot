@@ -8,25 +8,30 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { useEffect, useState } from "react"
+
+import { requestChats } from "./api/api.ts"
+import type { FetchedChat } from "./api/api.ts"
 
 export function ChatSidebar() {
-  const titles = [
-    "Chat 1",
-    "Chat 2",
-    "Chat 3",
-    "Chat 4",
-    "Chat 5",
-    "Chat 6",
-    "Chat 7",
-    "Chat 8",
-    "Chat 9"
-  ]
+  const [titles, setTitles] = useState<FetchedChat[]>([])
+
+
+  useEffect(() => {
+    requestChats()
+      .then((fetchedTitles) => {
+        console.log(fetchedTitles)
+        return setTitles(fetchedTitles)
+      }
+      )
+      .catch((err) => console.error(err))
+  }, [])
   return (
     <Sidebar>
       <SidebarHeader>
         <SidebarGroup>
       <div className="text-lg font-semibold tracking-tight">
-            Generic Chat Page
+            Generic Chat Pages
       </div>
         </SidebarGroup>
       </SidebarHeader>
@@ -36,7 +41,7 @@ export function ChatSidebar() {
             {titles.map((title, idx) => (
               <SidebarMenuItem key={idx}>
                 <SidebarMenuButton>
-                  <span>{title}</span>
+                  <span>{title.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
