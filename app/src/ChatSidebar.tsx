@@ -8,14 +8,16 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+
 import { useEffect, useState } from "react"
 
 import { requestChats } from "./api/api.ts"
 import type { FetchedChat } from "./api/api.ts"
+import { NavLink, useNavigate } from "react-router"
 
 export function ChatSidebar() {
+  const nav = useNavigate()
   const [titles, setTitles] = useState<FetchedChat[]>([])
-
 
   useEffect(() => {
     requestChats()
@@ -26,21 +28,26 @@ export function ChatSidebar() {
       )
       .catch((err) => console.error(err))
   }, [])
+
   return (
     <Sidebar>
       <SidebarHeader>
         <SidebarGroup>
-      <div className="text-lg font-semibold tracking-tight">
-            Generic Chat Pages
-      </div>
+          <NavLink to="/" className="text-lg font-semibold tracking-tight">
+            Generic Chat Page
+          </NavLink>
         </SidebarGroup>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {titles.map((title, idx) => (
+            {titles && titles.map((title, idx) => (
               <SidebarMenuItem key={idx}>
-                <SidebarMenuButton>
+                <SidebarMenuButton 
+                  onClick={() => {
+                    nav(`/${title.id}`)
+                    console.log(title.id)
+                  }}>
                   <span>{title.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -52,3 +59,4 @@ export function ChatSidebar() {
     </Sidebar>
   )
 }
+

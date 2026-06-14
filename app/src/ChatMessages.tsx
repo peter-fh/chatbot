@@ -3,6 +3,10 @@ import {
   CardContent,
 } from "@/components/ui/card"
 
+import { useEffect, useState } from "react";
+import { requestMessages } from "./api/api";
+import type { FetchedMessage } from "./api/api";
+
 export function MessageBubble({ role, content }: {
   role: "user" | "assistant";
   content: string;
@@ -27,20 +31,24 @@ export function MessageBubble({ role, content }: {
   );
 }
 
-export function Messages() {
-  const current_messages= [
-    {
-      role: 'user',
-      content: 'hi',
-    },
-    {
-      role: 'assistant',
-      content: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.'
-    },
-  ] as const
+interface MessagesProps {
+  id: string | undefined
+}
+
+export function Messages(props: MessagesProps) {
+  const [currentMessages, setCurrentMessages] = useState<FetchedMessage[]>([])
+  useEffect(() => {
+    if (props.id) {
+      requestMessages(props.id)
+        .then(messages => setCurrentMessages(messages))
+        .catch(err => console.error(err))
+    } else {
+      setCurrentMessages([])
+    }
+  }, [props.id])
   return (
     <div className="flex flex-col w-full p-10 gap-10">
-      {current_messages.map((message, idx) => (
+      {currentMessages.map((message, idx) => (
         <MessageBubble
           key={idx}
           role={message.role}
