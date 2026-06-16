@@ -46,7 +46,6 @@ export function ChatSidebar() {
                 <SidebarMenuButton 
                   onClick={() => {
                     nav(`/${title.id}`)
-                    console.log(title.id)
                   }}>
                   <span>{title.title}</span>
                 </SidebarMenuButton>

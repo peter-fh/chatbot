@@ -7,7 +7,7 @@ export interface FetchedChat {
 }
 
 export async function requestChats(): Promise<FetchedChat[]> {
-	const response = await fetch('/chats', {})
+	const response = await fetch('/api/chats', {})
 	if (!response.ok) {
 		const message = await response.text()
 		throw new Error(message || `Fetch failed: ${response.status}`)
@@ -23,7 +23,7 @@ export interface FetchedMessage {
 }
 
 export async function requestMessages(id: string): Promise<FetchedMessage[]> {
-	const response = await fetch(`/chats/${id}`, {})
+	const response = await fetch(`/api/chats/${id}`, {})
 	if (!response.ok) {
 		const message = await response.text()
 		throw new Error(message || `Fetch failed: ${response.status}`)

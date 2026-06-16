@@ -1,15 +1,14 @@
 package server
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
-	"time"
+    "context"
+    "fmt"
+    "net/http"
+    "time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+    "github.com/google/uuid"
+    "github.com/jackc/pgx/v5/pgxpool"
+    "github.com/gin-gonic/gin"
 )
 
 type DB struct {
@@ -126,43 +125,37 @@ func CreateServer() (*Server, error) {
 
     return &Server{db}, nil
 }
-func (s *Server) ChatHandler(w http.ResponseWriter, r *http.Request) {
+
+func (s *Server) ChatHandler(c *gin.Context) {
     titles, err := s.db.ChatTitles()
     if err != nil {
-	http.Error(w,fmt.Sprintf("db error fetching chats: %v", err), http.StatusInternalServerError)
+	c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("db error fetching chats: %v", err)})
 	return
     }
-
-    w.Header().Set("Content-Type", "application/json")
-
-    err = json.NewEncoder(w).Encode(titles)
-    if err != nil {
-	http.Error(w, fmt.Sprintf("json error serializing chats: %v", err), http.StatusInternalServerError)
-	return
-    }
+    c.JSON(http.StatusOK, titles)
 }
 
-func (s *Server) ChatHandlerById(w http.ResponseWriter, r *http.Request) {
-    path := strings.TrimPrefix(r.URL.Path, "/chats/")
 
-    id, err := uuid.Parse(path)
+func (s *Server) ChatHandlerById(c *gin.Context) {
+    param := c.Param("id")
+
+    id, err := uuid.Parse(param)
     if err != nil {
-	http.Error(w, fmt.Sprintf("fetching specific conversation with invalid uuid id: %v", path), http.StatusBadRequest)
+	c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("fetching specific conversation with invalid uuid: %v", param)})
 	return
     }
 
     messages, err := s.db.ChatMessages(id)
     if err != nil {
-	http.Error(w, fmt.Sprintf("db error fetching messages: %v", err), http.StatusInternalServerError)
+	c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("db error fetching messages: %v", err)})
 	return
     }
-    w.Header().Set("Content-Type", "application/json")
 
-    err = json.NewEncoder(w).Encode(messages)
-    if err != nil {
-	http.Error(w, fmt.Sprintf("json error serializing messages: %v", err), http.StatusInternalServerError)
-	return
-    }
+    c.JSON(http.StatusOK, messages)
+}
+
+
+func (s *Server) FileServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func Run() {
@@ -172,15 +165,25 @@ func Run() {
     if err != nil {
 	panic(err)
     }
+    r := gin.Default()
 
-    dir := http.Dir("./static")
-    http.HandleFunc("/chats", server.ChatHandler)
-    http.HandleFunc("/chats/", server.ChatHandlerById)
-    http.Handle("/", http.FileServer(dir))
-
-    fmt.Printf("Listening to port %s", port)
-    if err := http.ListenAndServe(port, nil); err != nil {
-	panic(err)
+    api := r.Group("/api")
+    {
+	api.GET("/chats", server.ChatHandler)
+	api.GET("/chats/:id", server.ChatHandlerById)
     }
+
+    // Static files
+    r.Static("/assets", "./static/assets")
+
+    r.GET("/", func(c *gin.Context) {
+	c.File("./static/index.html")
+    })
+    // Catch-all for React Router
+    r.NoRoute(func(c *gin.Context) {
+	c.File("./static/index.html")
+    })
+
+    r.Run(port)
 }
 
