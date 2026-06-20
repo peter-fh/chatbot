@@ -138,7 +138,7 @@ func (s *Server) ChatStream(c *gin.Context) {
 
 	// OpenRouter signals end of stream with [DONE]
 	if payload == "[DONE]" {
-	    fmt.Fprintf(w, "data: {\"done\":true}\n\n")
+	    fmt.Fprintf(w, "event: done\ndata: {}\n\n")
 	    return false
 	}
 
@@ -152,7 +152,7 @@ func (s *Server) ChatStream(c *gin.Context) {
 	    text := chunk.Choices[0].Delta.Content
 	    if text != "" {
 		data, _ := json.Marshal(gin.H{"text": text})
-		fmt.Fprintf(w, "data: %s\n\n", data)
+		fmt.Fprintf(w, "event: text\ndata: %s\n\n", data)
 	    }
 	}
 
