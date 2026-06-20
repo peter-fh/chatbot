@@ -8,7 +8,21 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/chats': 'http://localhost:8080',
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        // These disable buffering for SSE
+        headers: {
+          "X-Accel-Buffering": "no",
+        },
+        // Disable proxy response buffering
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            proxyRes.headers["cache-control"] = "no-cache";
+            proxyRes.headers["x-accel-buffering"] = "no";
+          });
+        },
+      },
     },
   },
   resolve: {

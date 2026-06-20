@@ -3,9 +3,7 @@ import {
   CardContent,
 } from "@/components/ui/card"
 
-import { useEffect, useState } from "react";
-import { requestMessages } from "./api/api";
-import type { FetchedMessage } from "./api/api";
+import type { LLMMessage } from "./api/api";
 
 export function MessageBubble({ role, content }: {
   role: "user" | "assistant";
@@ -32,23 +30,13 @@ export function MessageBubble({ role, content }: {
 }
 
 interface MessagesProps {
-  id: string | undefined
+  messages: LLMMessage[]
 }
 
 export function Messages(props: MessagesProps) {
-  const [currentMessages, setCurrentMessages] = useState<FetchedMessage[]>([])
-  useEffect(() => {
-    if (props.id) {
-      requestMessages(props.id)
-        .then(messages => setCurrentMessages(messages))
-        .catch(err => console.error(err))
-    } else {
-      setCurrentMessages([])
-    }
-  }, [props.id])
   return (
     <div className="flex flex-col w-full p-10 gap-10">
-      {currentMessages.map((message, idx) => (
+      {props.messages.map((message, idx) => (
         <MessageBubble
           key={idx}
           role={message.role}

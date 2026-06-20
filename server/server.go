@@ -1,117 +1,19 @@
 package server
 
 import (
-    "context"
-    "fmt"
-    "net/http"
-    "time"
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
 
-    "github.com/google/uuid"
-    "github.com/jackc/pgx/v5/pgxpool"
-    "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 )
-
-type DB struct {
-    pool *pgxpool.Pool
-}
-
-type Conversation struct {
-    ID		uuid.UUID   `json:"id"`
-    Title	string	    `json:"title"`
-    Summary	*string	    `json:"summary"`
-    Timestamp	time.Time   `json:"timestamp"`
-}
-
-type ConversationMessage struct {
-    ID		    uuid.UUID	`json:"id"`
-    ConversationId  uuid.UUID	`json:"conversation_id"`
-    Role	    string	`json:"role"`
-    Content	    string	`json:"content"`
-    Timestamp	    time.Time   `json:"timestamp"`
-}
-
-func DBConnect() (*DB, error) {
-    url := "postgres://localhost:5432/chat?sslmode=disable"
-    conn, err := pgxpool.New(context.Background(), url)
-    if err != nil {
-	return nil, fmt.Errorf("connection to database failed: %w\n", err)
-    }
-
-    return &DB{conn}, nil
-}
-
-func (db *DB) Close() {
-    db.pool.Close()
-}
-
-func (db *DB) ChatTitles() ([]Conversation, error) {
-    rows, err := db.pool.Query(context.Background(),`
-	SELECT id, title
-	FROM conversation
-	ORDER BY timestamp;
-    `)
-    if err != nil {
-	return nil, err
-    }
-    defer rows.Close()
-
-    var conversations []Conversation
-
-    for rows.Next() {
-	var conversation Conversation
-	err = rows.Scan(&conversation.ID, &conversation.Title)
-	if err != nil {
-	    return nil, err
-	}
-	conversations = append(conversations, conversation)
-    }
-
-    return conversations, nil
-}
-
-func (db *DB) ChatMessages(conversation_id uuid.UUID) ([]ConversationMessage, error) {
-    rows, err := db.pool.Query(context.Background(),`
-	SELECT role, content
-	FROM message
-	WHERE conversation_id=$1
-	ORDER BY timestamp;
-	`,
-	conversation_id,
-	)
-
-    if err != nil {
-	return nil, err
-    }
-    defer rows.Close()
-
-    var conversation []ConversationMessage
-    for rows.Next() {
-	var message ConversationMessage
-	err = rows.Scan(&message.Role, &message.Content)
-	if err != nil {
-	    return nil, err
-	}
-	conversation = append(conversation, message)
-    }
-
-    return conversation, nil
-
-}
-
-func DBExec() {
-    db, err := DBConnect()
-    if err != nil {
-	panic(err)
-    }
-
-    titles, err := db.ChatTitles()
-    if err != nil {
-	panic(err)
-    }
-
-    fmt.Println(titles)
-
-}
 
 type Server struct {
     db *DB
@@ -154,12 +56,118 @@ func (s *Server) ChatHandlerById(c *gin.Context) {
     c.JSON(http.StatusOK, messages)
 }
 
+type LLMMessage struct{
+    Role string	    `json:"role"`
+    Content string  `json:"content"`
+}
 
-func (s *Server) FileServer(w http.ResponseWriter, r *http.Request) {
+type OpenRouterRequest struct {
+    Model	string	    `json:"model"`
+    Messages	[]LLMMessage`json:"messages"`
+    Stream	bool	    `json:"stream"`
+}
+
+type ChatRequest struct {
+    Messages []LLMMessage `json:"messages"`
+}
+
+// The following struct and documentations are AI generated
+// The streaming response chunks look like this:
+// data: {"choices":[{"delta":{"content":"hello"}}]}
+type StreamChunk struct {
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+	} `json:"choices"`
+}
+
+func (s *Server) ChatStream(c *gin.Context) {
+    var req ChatRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+	c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	return
+    }
+    fmt.Printf("request: %v\n", req)
+    url := "https://openrouter.ai/api/v1/chat/completions"
+    body, _ := json.Marshal(OpenRouterRequest{
+	Model: "deepseek/deepseek-v4-flash",
+	Messages: req.Messages,
+	Stream: true,
+    })
+    request, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+    if err != nil {
+	c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("error on creating request to openrouter: %v", err)})
+	return
+    }
+
+    request.Header.Set("Content-Type", "application/json")
+    request.Header.Set("Authorization", "Bearer " + os.Getenv("OPENROUTER_API_KEY"))
+
+    client := http.Client{}
+    response, err := client.Do(request)
+    if err != nil {
+	c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("http error on request to openrouter: %v", err)})
+	return
+    }
+
+    defer response.Body.Close()
+
+    c.Header("Content-Type", "text/event-stream")
+    c.Header("Cache-Control", "no-cache")
+    c.Header("Connection", "keep-alive")
+    c.Header("Transfer-Encoding", "chunked")
+
+    scanner := bufio.NewScanner(response.Body)
+
+    // The internals of this function are AI generated
+    c.Stream(func(w io.Writer) bool {
+	if !scanner.Scan() {
+	    fmt.Fprintf(w, "data: {\"done\":true}\n\n")
+	    return false
+	}
+	
+	line := scanner.Text()
+
+	// OpenRouter sends lines like "data: {...}" and blank lines
+	if !strings.HasPrefix(line, "data: ") {
+	    return true // skip blank lines or other lines
+	}
+
+	payload := strings.TrimPrefix(line, "data: ")
+
+	// OpenRouter signals end of stream with [DONE]
+	if payload == "[DONE]" {
+	    fmt.Fprintf(w, "data: {\"done\":true}\n\n")
+	    return false
+	}
+
+	var chunk StreamChunk
+	if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+	    return true // skip malformed chunks
+	}
+
+
+	if len(chunk.Choices) > 0 {
+	    text := chunk.Choices[0].Delta.Content
+	    if text != "" {
+		data, _ := json.Marshal(gin.H{"text": text})
+		fmt.Fprintf(w, "data: %s\n\n", data)
+	    }
+	}
+
+	return true
+    })
+
 }
 
 func Run() {
     port := ":8080"
+
+    err := godotenv.Load()
+    if err != nil {
+	panic(err)
+    }
 
     server, err := CreateServer()
     if err != nil {
@@ -171,15 +179,13 @@ func Run() {
     {
 	api.GET("/chats", server.ChatHandler)
 	api.GET("/chats/:id", server.ChatHandlerById)
+	api.POST("/chat/stream", server.ChatStream)
     }
 
-    // Static files
     r.Static("/assets", "./static/assets")
-
     r.GET("/", func(c *gin.Context) {
 	c.File("./static/index.html")
     })
-    // Catch-all for React Router
     r.NoRoute(func(c *gin.Context) {
 	c.File("./static/index.html")
     })
